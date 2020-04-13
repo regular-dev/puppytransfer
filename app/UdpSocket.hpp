@@ -18,12 +18,13 @@ public :
                const std::string &arg_ip, uint16_t port);
     int send(const void *data, std::size_t);
 
-    int bind(const std::string &arg_ip, uint16_t port);
-
     int recvFrom(void *data, size_t size_buf, std::string &arg_ip, uint16_t &port);
 
+    int bind(const std::string &arg_ip, uint16_t port);
     int connect(const std::string &arg_ip, uint16_t port);
     void disconnect();
+
+    void setNonBlocking(bool flag);
 
 protected:
     int m_fd;

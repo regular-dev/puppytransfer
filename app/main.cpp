@@ -19,7 +19,7 @@ constexpr uint16_t default_recv_port = 21789;
 constexpr uint16_t default_send_port = 21790;
 
 constexpr const char *natserver_ip = "217.182.21.102";
-constexpr uint16_t natserver_port = 44555;
+constexpr uint16_t natserver_port = 2000;
 
 enum class MsgTypes {
     FIND = 1000,
@@ -45,18 +45,20 @@ void showHelp()
 
 std::pair< std::string, uint16_t > punchNat(const std::string &nat_word)
 {
+    const std::string nat_prefix("puppytransfer1.0_");
     std::pair< std::string, uint16_t > wrong("", 0);
 
     UdpSocket s_transport;
     UdpSocket s_msg;
     s_transport.bind("0.0.0.0", default_recv_port);
     s_msg.bind("0.0.0.0", default_send_port);
+    s_msg.setNonBlocking(true);
 
     // from transport socket
     picojson::object json_init;
-    json_init["cid"] = picojson::value(static_cast< double >(client_id));
+    json_init["client_id"] = picojson::value(static_cast< double >(client_id));
     json_init["type"] = picojson::value(static_cast< double >(MsgTypes::MMSTREAM));
-    json_init["pass"] = picojson::value(nat_word);
+    json_init["matchpass"] = picojson::value(nat_prefix + nat_word);
 
     std::string str_json_init = picojson::value(json_init).serialize();
 
@@ -67,7 +69,7 @@ std::pair< std::string, uint16_t > punchNat(const std::string &nat_word)
     str_json_init = picojson::value(json_init).serialize();
 
     using namespace std::chrono_literals;
-    std::this_thread::sleep_for(200ms);
+    std::this_thread::sleep_for(250ms);
 
     s_transport.sendTo(str_json_init.c_str(), str_json_init.size(), natserver_ip, natserver_port);
 
@@ -78,24 +80,47 @@ std::pair< std::string, uint16_t > punchNat(const std::string &nat_word)
     std::string remote_server_ip;
     uint16_t remote_server_port;
 
-    if (s_msg.recvFrom(buf_msg, 512, remote_server_ip, remote_server_port) < 0)
-        return wrong;
-
-    std::string str_buf(buf_msg);
+    std::string str_buf;
     picojson::value json_recvd;
 
-    std::string parse_errs = picojson::parse(json_recvd, str_buf);
+    std::cout << "Waiting for response from NAT hole punching server...\n";
+    while (1) {
+        if (s_msg.recvFrom(buf_msg, 512, remote_server_ip, remote_server_port) < 0) {
+            std::this_thread::sleep_for(2s);
+            
+            json_init["type"] = picojson::value(static_cast< double >(MsgTypes::FIND));
+            str_json_init = picojson::value(json_init).serialize();
+            // for MsgTypes::FIND
+            s_transport.sendTo(str_json_init.c_str(), str_json_init.size(), natserver_ip, natserver_port);
 
-    if (!parse_errs.empty()) {
-        std::cerr << "ERROR : Failed parsing received json from nat hole server...";
-        return wrong;
+            // for MsgTypes::MMSTREAM
+            json_init["type"] = picojson::value(static_cast< double >(MsgTypes::MMSTREAM));
+            str_json_init = picojson::value(json_init).serialize();
+			std::this_thread::sleep_for(250ms);
+
+            s_msg.sendTo(str_json_init.c_str(), str_json_init.size(), natserver_ip, natserver_port);
+        }
+        else {
+            str_buf = buf_msg;
+            std::string parse_errs = picojson::parse(json_recvd, str_buf);
+
+             if (!parse_errs.empty()) {
+                std::cerr << "ERROR : Failed parsing received json from nat hole server...";
+                return wrong;
+            }
+
+            if (json_recvd.get<picojson::object>()["type"].get< double >() == 1007) {
+                std::cout << "Received remote peer address...\n";
+                break;
+            }
+		}
     }
-
+   
     std::string remote_client_ip;
     uint16_t remote_client_port = 0;
     bool difference = false;
 
-    const picojson::value::object &obj = json_recvd.get<picojson::object>();
+    const picojson::value::object &obj = json_recvd.get< picojson::object >();
     for (picojson::value::object::const_iterator i = obj.begin();
          i != obj.end();
          ++i) {

@@ -1,5 +1,8 @@
 #include "UdpSocket.hpp"
 
+#include <fcntl.h>
+#include <iostream>
+
 UdpSocket::UdpSocket()
 {
     m_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -30,6 +33,13 @@ int UdpSocket::bind(const std::string &arg_ip, uint16_t port)
     s_addr_bind.sin_addr.s_addr = inet_addr(arg_ip.c_str());
 
     return ::bind(m_fd, (struct sockaddr *)&s_addr_bind, sizeof(s_addr_bind));
+}
+
+void UdpSocket::setNonBlocking(bool flag)
+{
+    int nonBlocking = flag;
+	if ( fcntl( m_fd, F_SETFL, O_NONBLOCK, nonBlocking ) == -1 )
+        std::cerr << "ERROR : failed to set nonBlocking mode";
 }
 
 int UdpSocket::sendTo(const void *data, std::size_t siz, const std::string &arg_ip,
