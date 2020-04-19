@@ -34,4 +34,4 @@ In public internet, we need to punch NAT to establish P2P connection, so you nee
 ./puppytransfer --send --nat_word=puppy_ # the same nat keyword
 ```
 
-See [regular_website](http://regular.viewdns.net)
+See [regular_website](https://regular-dev.org)
